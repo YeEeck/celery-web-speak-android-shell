@@ -9,6 +9,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -49,105 +51,107 @@ private const val KEY_SERVER_URL = "server_url"
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Edge-to-edge: transparent status/navigation bars, content draws behind them
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        // Web content has dark header — use light (white) status bar icons
+        WindowInsetsControllerCompat(window, window.decorView)
+            .isAppearanceLightStatusBars = false
 
         setContent {
             AppTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .windowInsetsPadding(WindowInsets.systemBars)
-                    ) {
-                        var screen by remember { mutableStateOf<Screen>(Screen.CheckingPermission) }
-                        var serverUrl by remember { mutableStateOf("") }
-                        var resumeCount by remember { mutableIntStateOf(0) }
+                    var screen by remember { mutableStateOf<Screen>(Screen.CheckingPermission) }
+                    var serverUrl by remember { mutableStateOf("") }
+                    var resumeCount by remember { mutableIntStateOf(0) }
 
-                        // Observe lifecycle to re-check permission when returning from settings
-                        val lifecycleOwner = LocalLifecycleOwner.current
-                        DisposableEffect(lifecycleOwner) {
-                            val observer = LifecycleEventObserver { _, event ->
-                                if (event == Lifecycle.Event.ON_RESUME) {
-                                    resumeCount++
-                                }
-                            }
-                            lifecycleOwner.lifecycle.addObserver(observer)
-                            onDispose {
-                                lifecycleOwner.lifecycle.removeObserver(observer)
+                    // Observe lifecycle to re-check permission when returning from settings
+                    val lifecycleOwner = LocalLifecycleOwner.current
+                    DisposableEffect(lifecycleOwner) {
+                        val observer = LifecycleEventObserver { _, event ->
+                            if (event == Lifecycle.Event.ON_RESUME) {
+                                resumeCount++
                             }
                         }
+                        lifecycleOwner.lifecycle.addObserver(observer)
+                        onDispose {
+                            lifecycleOwner.lifecycle.removeObserver(observer)
+                        }
+                    }
 
-                        val permissionLauncher = rememberLauncherForActivityResult(
-                            ActivityResultContracts.RequestPermission()
-                        ) { granted ->
+                    val permissionLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.RequestPermission()
+                    ) { granted ->
+                        if (granted) {
+                            screen = Screen.Setup
+                        } else {
+                            screen = Screen.PermissionDenied
+                        }
+                    }
+
+                    LaunchedEffect(Unit) {
+                        val hasPermission = ContextCompat.checkSelfPermission(
+                            this@MainActivity,
+                            Manifest.permission.RECORD_AUDIO
+                        ) == PackageManager.PERMISSION_GRANTED
+
+                        if (hasPermission) {
+                            screen = Screen.Setup
+                        } else {
+                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    }
+
+                    // Re-check permission on resume (e.g. returning from settings)
+                    LaunchedEffect(resumeCount) {
+                        if (resumeCount > 0 && screen == Screen.PermissionDenied) {
+                            val granted = ContextCompat.checkSelfPermission(
+                                this@MainActivity, Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
                             if (granted) {
                                 screen = Screen.Setup
-                            } else {
-                                screen = Screen.PermissionDenied
                             }
                         }
+                    }
 
-                        LaunchedEffect(Unit) {
-                            val hasPermission = ContextCompat.checkSelfPermission(
-                                this@MainActivity,
-                                Manifest.permission.RECORD_AUDIO
-                            ) == PackageManager.PERMISSION_GRANTED
-
-                            if (hasPermission) {
-                                screen = Screen.Setup
-                            } else {
-                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            }
+                    when (screen) {
+                        Screen.CheckingPermission -> {
+                            PermissionCheckScreen()
                         }
 
-                        // Re-check permission on resume (e.g. returning from settings)
-                        LaunchedEffect(resumeCount) {
-                            if (resumeCount > 0 && screen == Screen.PermissionDenied) {
-                                val granted = ContextCompat.checkSelfPermission(
-                                    this@MainActivity, Manifest.permission.RECORD_AUDIO
-                                ) == PackageManager.PERMISSION_GRANTED
-                                if (granted) {
-                                    screen = Screen.Setup
+                        Screen.PermissionDenied -> {
+                            PermissionDeniedScreen(
+                                onGoToSettings = {
+                                    val intent = Intent(
+                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        Uri.fromParts("package", packageName, null)
+                                    )
+                                    startActivity(intent)
                                 }
+                            )
+                        }
+
+                        Screen.Setup -> {
+                            val savedUrl = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                                .getString(KEY_SERVER_URL, "") ?: ""
+                            SetupScreen(savedUrl = savedUrl) { url ->
+                                getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                                    .edit()
+                                    .putString(KEY_SERVER_URL, url)
+                                    .apply()
+                                serverUrl = url
+                                screen = Screen.WebView
                             }
                         }
 
-                        when (screen) {
-                            Screen.CheckingPermission -> {
-                                PermissionCheckScreen()
-                            }
-
-                            Screen.PermissionDenied -> {
-                                PermissionDeniedScreen(
-                                    onGoToSettings = {
-                                        val intent = Intent(
-                                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                            Uri.fromParts("package", packageName, null)
-                                        )
-                                        startActivity(intent)
-                                    }
-                                )
-                            }
-
-                            Screen.Setup -> {
-                                val savedUrl = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                                    .getString(KEY_SERVER_URL, "") ?: ""
-                                SetupScreen(savedUrl = savedUrl) { url ->
-                                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                                        .edit()
-                                        .putString(KEY_SERVER_URL, url)
-                                        .apply()
-                                    serverUrl = url
-                                    screen = Screen.WebView
-                                }
-                            }
-
-                            Screen.WebView -> {
-                                WebViewScreen(
-                                    url = serverUrl,
-                                    onExit = { finish() }
-                                )
-                            }
+                        Screen.WebView -> {
+                            // WebView fills the entire screen (edge-to-edge),
+                            // web app handles safe area via viewport-fit=cover
+                            WebViewScreen(
+                                url = serverUrl,
+                                onExit = { finish() }
+                            )
                         }
                     }
                 }
@@ -166,7 +170,9 @@ private enum class Screen {
 @androidx.compose.runtime.Composable
 private fun PermissionCheckScreen() {
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.systemBars),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -184,6 +190,7 @@ private fun PermissionDeniedScreen(onGoToSettings: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.systemBars)
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center

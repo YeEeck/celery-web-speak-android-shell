@@ -1,9 +1,11 @@
 package com.yeck.celerywebspeak.android.shell.ui
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
@@ -33,6 +35,24 @@ import androidx.compose.ui.viewinterop.AndroidView
 
 /** Matches the web app's --rail dark color so the system-bars inset area blends in. */
 private val RailColor = Color(0xFF1E1F22)
+
+/**
+ * Marker injected into the WebView so the web app can detect that it is
+ * running inside the Android shell and report itself as the "android" client.
+ * Exposed via addJavascriptInterface so it exists before any page script
+ * runs, avoiding the injection races that evaluateJavascript is subject to.
+ */
+private class CeleryShellBridge(private val context: Context) {
+    @JavascriptInterface
+    fun platform(): String = "android"
+
+    @JavascriptInterface
+    fun version(): String = try {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
+    } catch (_: Exception) {
+        ""
+    }
+}
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -84,6 +104,8 @@ fun WebViewScreen(
                         settings.setSupportZoom(false)
                         settings.useWideViewPort = true
                         settings.loadWithOverviewMode = true
+
+                        addJavascriptInterface(CeleryShellBridge(ctx), "celeryShell")
 
                         webViewClient = object : WebViewClient() {
                             override fun shouldOverrideUrlLoading(

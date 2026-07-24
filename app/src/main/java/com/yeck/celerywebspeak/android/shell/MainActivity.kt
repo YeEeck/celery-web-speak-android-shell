@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -46,19 +48,22 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             AppTheme {
-                var screen by mutableStateOf<Screen>(Screen.CheckingPermission)
-                var serverUrl by mutableStateOf("")
+                var screen by remember { mutableStateOf<Screen>(Screen.CheckingPermission) }
+                var serverUrl by remember { mutableStateOf("") }
                 var resumeCount by remember { mutableIntStateOf(0) }
 
                 // Observe lifecycle to re-check permission when returning from settings
                 val lifecycleOwner = LocalLifecycleOwner.current
-                LaunchedEffect(lifecycleOwner) {
+                DisposableEffect(lifecycleOwner) {
                     val observer = LifecycleEventObserver { _, event ->
                         if (event == Lifecycle.Event.ON_RESUME) {
                             resumeCount++
                         }
                     }
                     lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                    }
                 }
 
                 val permissionLauncher = rememberLauncherForActivityResult(
@@ -68,6 +73,19 @@ class MainActivity : ComponentActivity() {
                         screen = Screen.Setup
                     } else {
                         screen = Screen.PermissionDenied
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    val hasPermission = ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.RECORD_AUDIO
+                    ) == PackageManager.PERMISSION_GRANTED
+
+                    if (hasPermission) {
+                        screen = Screen.Setup
+                    } else {
+                        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     }
                 }
 
@@ -85,15 +103,7 @@ class MainActivity : ComponentActivity() {
 
                 when (screen) {
                     Screen.CheckingPermission -> {
-                        val hasPermission = ContextCompat.checkSelfPermission(
-                            this, Manifest.permission.RECORD_AUDIO
-                        ) == PackageManager.PERMISSION_GRANTED
-
-                        if (hasPermission) {
-                            screen = Screen.Setup
-                        } else {
-                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                        }
+                        PermissionCheckScreen()
                     }
 
                     Screen.PermissionDenied -> {
@@ -138,6 +148,22 @@ private enum class Screen {
     PermissionDenied,
     Setup,
     WebView
+}
+
+@androidx.compose.runtime.Composable
+private fun PermissionCheckScreen() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        CircularProgressIndicator()
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "正在检查麦克风权限",
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
 }
 
 @androidx.compose.runtime.Composable

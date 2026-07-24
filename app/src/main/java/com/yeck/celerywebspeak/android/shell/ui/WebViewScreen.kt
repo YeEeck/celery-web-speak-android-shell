@@ -152,6 +152,27 @@ fun WebViewScreen(
                                 }
                             }
 
+                            override fun onPageFinished(view: WebView?, url: String?) {
+                                super.onPageFinished(view, url)
+                                // Strip Chromium's default blue tap highlight globally. No
+                                // !important — yield to any highlight color the app sets
+                                // itself. The id guard keeps it idempotent across repeated
+                                // onPageFinished calls (iframes/redirects); the <style>
+                                // persists through SPA route changes and is re-injected on
+                                // full reloads.
+                                view?.evaluateJavascript(
+                                    """(function(){
+                                        if(!document.getElementById('celery-no-tap-highlight')){
+                                            var s=document.createElement('style');
+                                            s.id='celery-no-tap-highlight';
+                                            s.textContent='*{-webkit-tap-highlight-color:transparent;}';
+                                            (document.head||document.documentElement).appendChild(s);
+                                        }
+                                    })()""".trimIndent(),
+                                    null
+                                )
+                            }
+
                             override fun onRenderProcessGone(
                                 view: WebView,
                                 detail: RenderProcessGoneDetail

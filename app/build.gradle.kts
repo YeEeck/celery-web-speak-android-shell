@@ -24,8 +24,8 @@ android {
         applicationId = "com.yeck.celerywebspeak.android.shell"
         minSdk = 26
         targetSdk = 35
-        versionCode = versionCodeOverride ?: 3
-        versionName = versionNameOverride ?: "1.0.2"
+        versionCode = versionCodeOverride ?: 4
+        versionName = versionNameOverride ?: "1.0.3"
     }
 
     signingConfigs {

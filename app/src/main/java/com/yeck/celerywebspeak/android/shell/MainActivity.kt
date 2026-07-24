@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.webkit.CookieManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -49,6 +50,11 @@ private const val PREFS_NAME = "app_prefs"
 private const val KEY_SERVER_URL = "server_url"
 
 class MainActivity : ComponentActivity() {
+
+    override fun onPause() {
+        super.onPause()
+        CookieManager.getInstance().flush()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Edge-to-edge: transparent status/navigation bars, content draws behind them

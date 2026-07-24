@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.RenderProcessGoneDetail
@@ -18,9 +19,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
@@ -31,7 +35,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.delay
 
 /** Matches the web app's --rail dark color so the system-bars inset area blends in. */
 private val RailColor = Color(0xFF1E1F22)
@@ -61,9 +67,28 @@ fun WebViewScreen(
     onExit: () -> Unit
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
     var webView by remember { mutableStateOf<WebView?>(null) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
     var webViewKey by remember { mutableStateOf(0) }
+    val imeBottom = WindowInsets.ime.getBottom(density)
+
+    // When keyboard starts appearing, scroll focused input into view concurrently
+    // with the keyboard animation (50ms is just enough for the first layout frame).
+    LaunchedEffect(imeBottom) {
+        if (imeBottom > 0) {
+            delay(50)
+            webView?.evaluateJavascript(
+                """(function(){
+                    var el=document.activeElement;
+                    if(el&&(el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.isContentEditable)){
+                        el.scrollIntoView({block:'center',behavior:'smooth'});
+                    }
+                })()""".trimIndent(),
+                null
+            )
+        }
+    }
 
     BackHandler {
         val wv = webView
@@ -85,6 +110,7 @@ fun WebViewScreen(
             .fillMaxSize()
             .background(RailColor)
             .windowInsetsPadding(WindowInsets.systemBars)
+            .imePadding()
     ) {
         key(webViewKey) {
             AndroidView(
@@ -146,6 +172,7 @@ fun WebViewScreen(
                     }
                 },
                 onRelease = { wv ->
+                    CookieManager.getInstance().flush()
                     wv.stopLoading()
                     wv.destroy()
                     webView = null

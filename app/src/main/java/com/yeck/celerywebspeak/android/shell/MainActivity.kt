@@ -11,14 +11,19 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -48,94 +53,102 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             AppTheme {
-                var screen by remember { mutableStateOf<Screen>(Screen.CheckingPermission) }
-                var serverUrl by remember { mutableStateOf("") }
-                var resumeCount by remember { mutableIntStateOf(0) }
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .windowInsetsPadding(WindowInsets.systemBars)
+                    ) {
+                        var screen by remember { mutableStateOf<Screen>(Screen.CheckingPermission) }
+                        var serverUrl by remember { mutableStateOf("") }
+                        var resumeCount by remember { mutableIntStateOf(0) }
 
-                // Observe lifecycle to re-check permission when returning from settings
-                val lifecycleOwner = LocalLifecycleOwner.current
-                DisposableEffect(lifecycleOwner) {
-                    val observer = LifecycleEventObserver { _, event ->
-                        if (event == Lifecycle.Event.ON_RESUME) {
-                            resumeCount++
-                        }
-                    }
-                    lifecycleOwner.lifecycle.addObserver(observer)
-                    onDispose {
-                        lifecycleOwner.lifecycle.removeObserver(observer)
-                    }
-                }
-
-                val permissionLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestPermission()
-                ) { granted ->
-                    if (granted) {
-                        screen = Screen.Setup
-                    } else {
-                        screen = Screen.PermissionDenied
-                    }
-                }
-
-                LaunchedEffect(Unit) {
-                    val hasPermission = ContextCompat.checkSelfPermission(
-                        this@MainActivity,
-                        Manifest.permission.RECORD_AUDIO
-                    ) == PackageManager.PERMISSION_GRANTED
-
-                    if (hasPermission) {
-                        screen = Screen.Setup
-                    } else {
-                        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    }
-                }
-
-                // Re-check permission on resume (e.g. returning from settings)
-                LaunchedEffect(resumeCount) {
-                    if (resumeCount > 0 && screen == Screen.PermissionDenied) {
-                        val granted = ContextCompat.checkSelfPermission(
-                            this@MainActivity, Manifest.permission.RECORD_AUDIO
-                        ) == PackageManager.PERMISSION_GRANTED
-                        if (granted) {
-                            screen = Screen.Setup
-                        }
-                    }
-                }
-
-                when (screen) {
-                    Screen.CheckingPermission -> {
-                        PermissionCheckScreen()
-                    }
-
-                    Screen.PermissionDenied -> {
-                        PermissionDeniedScreen(
-                            onGoToSettings = {
-                                val intent = Intent(
-                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                    Uri.fromParts("package", packageName, null)
-                                )
-                                startActivity(intent)
+                        // Observe lifecycle to re-check permission when returning from settings
+                        val lifecycleOwner = LocalLifecycleOwner.current
+                        DisposableEffect(lifecycleOwner) {
+                            val observer = LifecycleEventObserver { _, event ->
+                                if (event == Lifecycle.Event.ON_RESUME) {
+                                    resumeCount++
+                                }
                             }
-                        )
-                    }
-
-                    Screen.Setup -> {
-                        val savedUrl = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                            .getString(KEY_SERVER_URL, "") ?: ""
-                        SetupScreen(savedUrl = savedUrl) { url ->
-                            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                                .edit()
-                                .putString(KEY_SERVER_URL, url)
-                                .apply()
-                            serverUrl = url
-                            screen = Screen.WebView
+                            lifecycleOwner.lifecycle.addObserver(observer)
+                            onDispose {
+                                lifecycleOwner.lifecycle.removeObserver(observer)
+                            }
                         }
-                    }
 
-                    Screen.WebView -> {
-                        WebViewScreen(
-                            url = serverUrl,
-                            onExit = { finish() }
-                        )
+                        val permissionLauncher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.RequestPermission()
+                        ) { granted ->
+                            if (granted) {
+                                screen = Screen.Setup
+                            } else {
+                                screen = Screen.PermissionDenied
+                            }
+                        }
+
+                        LaunchedEffect(Unit) {
+                            val hasPermission = ContextCompat.checkSelfPermission(
+                                this@MainActivity,
+                                Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
+
+                            if (hasPermission) {
+                                screen = Screen.Setup
+                            } else {
+                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        }
+
+                        // Re-check permission on resume (e.g. returning from settings)
+                        LaunchedEffect(resumeCount) {
+                            if (resumeCount > 0 && screen == Screen.PermissionDenied) {
+                                val granted = ContextCompat.checkSelfPermission(
+                                    this@MainActivity, Manifest.permission.RECORD_AUDIO
+                                ) == PackageManager.PERMISSION_GRANTED
+                                if (granted) {
+                                    screen = Screen.Setup
+                                }
+                            }
+                        }
+
+                        when (screen) {
+                            Screen.CheckingPermission -> {
+                                PermissionCheckScreen()
+                            }
+
+                            Screen.PermissionDenied -> {
+                                PermissionDeniedScreen(
+                                    onGoToSettings = {
+                                        val intent = Intent(
+                                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                            Uri.fromParts("package", packageName, null)
+                                        )
+                                        startActivity(intent)
+                                    }
+                                )
+                            }
+
+                            Screen.Setup -> {
+                                val savedUrl = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                                    .getString(KEY_SERVER_URL, "") ?: ""
+                                SetupScreen(savedUrl = savedUrl) { url ->
+                                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                                        .edit()
+                                        .putString(KEY_SERVER_URL, url)
+                                        .apply()
+                                    serverUrl = url
+                                    screen = Screen.WebView
+                                }
+                            }
+
+                            Screen.WebView -> {
+                                WebViewScreen(
+                                    url = serverUrl,
+                                    onExit = { finish() }
+                                )
+                            }
+                        }
                     }
                 }
             }

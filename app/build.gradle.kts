@@ -4,6 +4,18 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val versionNameOverride = System.getenv("CWS_VERSION_NAME")
+    ?.removePrefix("v")
+    ?.takeIf { it.isNotBlank() }
+val versionCodeOverride = System.getenv("CWS_VERSION_CODE")?.let { value ->
+    requireNotNull(value.toIntOrNull()?.takeIf { it > 0 }) {
+        "CWS_VERSION_CODE must be a positive integer"
+    }
+}
+
+val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+val hasReleaseSigningConfig = !releaseKeystorePath.isNullOrBlank()
+
 android {
     namespace = "com.yeck.celerywebspeak.android.shell"
     compileSdk = 35
@@ -12,13 +24,33 @@ android {
         applicationId = "com.yeck.celerywebspeak.android.shell"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = versionCodeOverride ?: 1
+        versionName = versionNameOverride ?: "1.0.0"
+    }
+
+    signingConfigs {
+        if (hasReleaseSigningConfig) {
+            create("release") {
+                storeFile = file(requireNotNull(releaseKeystorePath))
+                storePassword = requireNotNull(System.getenv("ANDROID_KEYSTORE_PASSWORD")) {
+                    "ANDROID_KEYSTORE_PASSWORD is required for release signing"
+                }
+                keyAlias = requireNotNull(System.getenv("ANDROID_KEY_ALIAS")) {
+                    "ANDROID_KEY_ALIAS is required for release signing"
+                }
+                keyPassword = requireNotNull(System.getenv("ANDROID_KEY_PASSWORD")) {
+                    "ANDROID_KEY_PASSWORD is required for release signing"
+                }
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
+            if (hasReleaseSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
